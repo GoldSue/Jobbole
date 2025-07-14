@@ -2,8 +2,8 @@ import re
 import json
 import scrapy
 from urllib import parse
-
-
+from ArticleSpider.items import Jobbole
+from ArticleSpider.utils import common
 class JobboleSpider(scrapy.Spider):
     name = "Jobbole"
     allowed_domains = ["news.cnblogs.com"]
@@ -49,13 +49,26 @@ class JobboleSpider(scrapy.Spider):
             )
 
     def parse(self, response):
-        hrefs = response.xpath('//h2[@class="news_entry"]/a/@href').getall()
-        for href in hrefs:
+        # 获取所有的新闻条目（每一条都是一个 div.content）
+        items = response.xpath('//div[@class="content"]')
+
+        for item in items:
+            # 提取每条新闻的链接
+            href = item.xpath('.//h2[@class="news_entry"]/a/@href').get()
             full_url = response.urljoin(href)
-            # print("文章详情 URL：", full_url)
+
+            # 提取该条新闻的图片链接
+            img_url = item.xpath('.//img[@class="topic_img"]/@src').get()  # 注意：img在当前item下找
+
+            print("详情页 URL：", full_url)
+            print("图片 URL：", img_url)
+
+            # 可以将 img_url 加到 meta 中传递到详情页
             yield scrapy.Request(
                 url=full_url,
-                callback=self.parse_detail
+                callback=self.parse_detail,
+                meta={'img_url': img_url
+                      }
             )
 
         # 提取下一页
@@ -68,17 +81,22 @@ class JobboleSpider(scrapy.Spider):
     def parse_detail(self, response):
         match = re.match(r'.*?(\d+)', response.url)
         if match:
+            article_item = Jobbole()
             news_id = match.group(1)
             title = response.css('#news_title a::text').get(default='').strip()
             create_date = response.css('.time::text').get(default='').strip()
-            news_body = ''.join(response.css('#news_body ::text').getall()).strip()
+            content = ''.join(response.css('#news_body ::text').getall()).strip()
             tag_list = response.css('#link_source2::text').getall()
             tags = ",".join(tag.strip() for tag in tag_list)
+            # article_item['news_id'] = news_id
 
-            print("文章标题：", title)
-            print("文章发布时间：", create_date)
-            print("文章标签：", tags)
-            print("文章内容：", news_body)
+            article_item['title'] = title
+            article_item['create_date'] = create_date
+            article_item['url'] = response.url
+
+            article_item['content'] = content
+            article_item['tags'] = tags
+            article_item['url_object_id'] = common.get_md5(response.url)
 
 
             # 发 Ajax 请求获取数据
@@ -87,28 +105,26 @@ class JobboleSpider(scrapy.Spider):
                 url=ajax_url,
                 callback=self.parse_num,
                 meta={
-                    "news_id": news_id,
                     "title": title,
                     "create_date": create_date,
-                    "news_body": news_body,
-                    "tags": tags
+                    "url": response.url,
+                    "front_image_url": response.meta['img_url'],
+                    "tags": tags,
+                    "content": content,
+
                 }
             )
 
     def parse_num(self, response):
         data = json.loads(response.text)
-        if data:
-            print("文章阅读数：", data.get("TotalView"))
-            print("文章评论数：", data.get("CommentCount"))
-            print("文章点赞数：", data.get("DiggCount"))
+        article_item = response.meta.get('article_item','')
+        praise_nums = data.get('DiggCount', 0)
+        fav_nums = data.get('ViewCount', 0)
+        comment_nums = data.get('CommentCount', 0)
 
-        yield {
-            "news_id": response.meta['news_id'],
-            "title": response.meta['title'],
-            "create_date": response.meta['create_date'],
-            "news_body": response.meta['news_body'],
-            "tags": response.meta['tags'],
-            "read_num": data.get("TotalView"),
-            "comment_num": data.get("CommentCount"),
-            "digg_num": data.get("DiggCount")
-        }
+        article_item['praise_nums'] = praise_nums
+        article_item['fav_nums'] = fav_nums
+        article_item['comment_nums'] = comment_nums
+        article_item['url_object_id'] = common.get_md5(article_item['url'])
+
+        yield article_item
