@@ -6,7 +6,9 @@
 #     https://docs.scrapy.org/en/latest/topics/settings.html
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-
+import os
+import sys
+from scrapy.cmdline import execute
 BOT_NAME = "ArticleSpider"
 
 SPIDER_MODULES = ["ArticleSpider.spiders"]
@@ -67,6 +69,7 @@ ROBOTSTXT_OBEY = True
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
    "ArticleSpider.pipelines.ArticlespiderPipeline": 300,
+   "ArticleSpider.pipelines.ArticleImgPipeline": 1,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -92,3 +95,8 @@ ITEM_PIPELINES = {
 
 # Set settings whose default value is deprecated to a future-proof value
 FEED_EXPORT_ENCODING = "utf-8"
+
+IMAGES_URLS_FIELD = "front_image_url"
+project_dir = os.path.dirname(os.path.abspath(__file__))
+
+IMAGES_STORE = os.path.join(project_dir, "images")

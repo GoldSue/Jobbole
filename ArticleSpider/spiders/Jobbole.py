@@ -6,7 +6,7 @@ from ArticleSpider.items import Jobbole
 from ArticleSpider.utils import common
 class JobboleSpider(scrapy.Spider):
     name = "Jobbole"
-    allowed_domains = ["news.cnblogs.com"]
+    # allowed_domains = ["news.cnblogs.com"]
     start_urls = ["https://news.cnblogs.com"]
     custom_settings = {
         'COOKIES_ENABLED': True
@@ -93,7 +93,8 @@ class JobboleSpider(scrapy.Spider):
             article_item['title'] = title
             article_item['create_date'] = create_date
             article_item['url'] = response.url
-
+            image_url = [response.meta['img_url']]
+            article_item['front_image_url'] = image_url
             article_item['content'] = content
             article_item['tags'] = tags
             article_item['url_object_id'] = common.get_md5(response.url)
@@ -105,13 +106,13 @@ class JobboleSpider(scrapy.Spider):
                 url=ajax_url,
                 callback=self.parse_num,
                 meta={
+                    "article_item": article_item,
                     "title": title,
                     "create_date": create_date,
                     "url": response.url,
                     "front_image_url": response.meta['img_url'],
                     "tags": tags,
                     "content": content,
-
                 }
             )
 
