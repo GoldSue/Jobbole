@@ -1,12 +1,13 @@
 import re
 import json
+import time
 import scrapy
 from urllib import parse
 from ArticleSpider.items import Jobbole
 from ArticleSpider.utils import common
+
 class JobboleSpider(scrapy.Spider):
     name = "Jobbole"
-    # allowed_domains = ["news.cnblogs.com"]
     start_urls = ["https://news.cnblogs.com"]
     custom_settings = {
         'COOKIES_ENABLED': True
@@ -22,6 +23,7 @@ class JobboleSpider(scrapy.Spider):
         browser = uc.Chrome(options=options)
 
         try:
+            start = time.time()
             browser.get('https://account.cnblogs.com/signin')
             time.sleep(3)
             browser.find_element('id', 'mat-input-0').send_keys('q15136522267@gmail.com')
@@ -34,6 +36,7 @@ class JobboleSpider(scrapy.Spider):
             browser.find_element('xpath', '//li/a[text()="新闻"]').click()
             time.sleep(2)
             cookies = {c['name']: c['value'] for c in browser.get_cookies()}
+            self.logger.info(f"get_login_cookies took {time.time() - start:.2f} seconds")
         finally:
             browser.quit()
         return cookies
@@ -49,33 +52,25 @@ class JobboleSpider(scrapy.Spider):
             )
 
     def parse(self, response):
-        # 获取所有的新闻条目（每一条都是一个 div.content）
+        start = time.time()
         items = response.xpath('//div[@class="content"]')
+        self.logger.info(f"parse list page got {len(items)} items")
 
         for item in items:
-            # 提取每条新闻的链接
             href = item.xpath('.//h2[@class="news_entry"]/a/@href').get()
             full_url = response.urljoin(href)
 
-            # 提取该条新闻的图片链接
-            img_url = item.xpath('.//img[@class="topic_img"]/@src').get()  # 注意：img在当前item下找
-
-            print("详情页 URL：", full_url)
-            print("图片 URL：", img_url)
-
-            # 可以将 img_url 加到 meta 中传递到详情页
+            img_url = item.xpath('.//img[@class="topic_img"]/@src').get()
             yield scrapy.Request(
                 url=full_url,
                 callback=self.parse_detail,
-                meta={'img_url': img_url
-                      }
+                meta={'img_url': img_url}
             )
+        self.logger.info(f"parse list page took {time.time() - start:.2f} seconds")
 
-        # 提取下一页
         next_page = response.xpath('//a[text()="Next >"]/@href').get()
         if next_page:
             next_page_url = response.urljoin(next_page)
-            print("下一页 URL：", next_page_url)
             yield scrapy.Request(url=next_page_url, callback=self.parse)
 
     def parse_detail(self, response):
@@ -88,7 +83,6 @@ class JobboleSpider(scrapy.Spider):
             content = ''.join(response.css('#news_body ::text').getall()).strip()
             tag_list = response.css('#link_source2::text').getall()
             tags = ",".join(tag.strip() for tag in tag_list)
-            # article_item['news_id'] = news_id
 
             article_item['title'] = title
             article_item['create_date'] = create_date
@@ -100,25 +94,16 @@ class JobboleSpider(scrapy.Spider):
             article_item['url_object_id'] = common.get_md5(response.url)
 
 
-            # 发 Ajax 请求获取数据
             ajax_url = parse.urljoin(response.url, f"/NewsAjax/GetAjaxNewsInfo?contentId={news_id}")
             yield scrapy.Request(
                 url=ajax_url,
                 callback=self.parse_num,
-                meta={
-                    "article_item": article_item,
-                    "title": title,
-                    "create_date": create_date,
-                    "url": response.url,
-                    "front_image_url": response.meta['img_url'],
-                    "tags": tags,
-                    "content": content,
-                }
+                meta={"article_item": article_item}
             )
 
     def parse_num(self, response):
         data = json.loads(response.text)
-        article_item = response.meta.get('article_item','')
+        article_item = response.meta.get('article_item', '')
         praise_nums = data.get('DiggCount', 0)
         fav_nums = data.get('ViewCount', 0)
         comment_nums = data.get('CommentCount', 0)
@@ -127,5 +112,6 @@ class JobboleSpider(scrapy.Spider):
         article_item['fav_nums'] = fav_nums
         article_item['comment_nums'] = comment_nums
         article_item['url_object_id'] = common.get_md5(article_item['url'])
+
 
         yield article_item
