@@ -74,6 +74,7 @@ class JobboleSpider(scrapy.Spider):
             yield scrapy.Request(url=next_page_url, callback=self.parse)
 
     def parse_detail(self, response):
+        start_time = time.time()
         match = re.match(r'.*?(\d+)', response.url)
         if match:
             article_item = Jobbole()
