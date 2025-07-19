@@ -82,7 +82,7 @@ class MysqlPipeline(object):
             elif affected_rows == 2:
                 self.duplicate_count += 1
                 if not self.has_printed_duplicate:
-                    spider.logger.info(f"MySQL处理，重复更新 1 条❌ 文章标题: {item.get('title', '')[:25]}")
+                    spider.logger.info(f"MySQL处理，重复更新 1 条 ❌ 文章标题: {item.get('title', '')[:25]}")
                     self.has_printed_duplicate = True
 
         except Exception as e:
