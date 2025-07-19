@@ -1,12 +1,8 @@
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-import json
 import time
 import MySQLdb
 from scrapy.pipelines.images import ImagesPipeline
 from scrapy import Request
+from scrapy import signals
 
 
 def clean_url_list(urls):
@@ -24,24 +20,30 @@ class ArticlespiderPipeline:
 class MysqlPipeline(object):
     def __init__(self):
         self.i = 0
+        self.insert_success_count = 0
+        self.duplicate_count = 0
+        self.fail_count = 0
+        self.has_printed_duplicate = False
+        self.has_printed_failed = False
+
         self.conn = MySQLdb.connect(
-            host='localhost',
-            user='root',
-            passwd='Gold7789@',
-            db='article_spider',
-            charset='utf8',
-            use_unicode=True
+            host='localhost', user='root', passwd='Gold7789@',
+            db='article_spider', charset='utf8', use_unicode=True
         )
         self.cursor = self.conn.cursor()
 
-    def process_item(self, item, spider):
-        start_time = time.time()
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls()
+        crawler.signals.connect(pipeline.spider_closed, signal=signals.spider_closed)
+        return pipeline
 
+    def process_item(self, item, spider):
         insert_sql = """
             INSERT INTO jobbole_article(title, url, url_object_id, front_image_path,
-                                        front_image_url, parise_nums, comment_nums,
-                                        fav_nums, tags, content, create_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                       front_image_url, parise_nums, comment_nums,
+                                       fav_nums, tags, content, create_date,insert_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,NOW())
             ON DUPLICATE KEY UPDATE
                 title=VALUES(title),
                 front_image_path=VALUES(front_image_path),
@@ -54,18 +56,16 @@ class MysqlPipeline(object):
                 create_date=VALUES(create_date)
         """
 
-        # ✅ 安全处理图片链接列表
-        safe_urls = clean_url_list(item.get('front_image_url', []))
-        joined_urls = ",".join(safe_urls)
+        image_urls = clean_url_list(item.get("front_image_url", []))
+        joined_urls = ",".join(image_urls)
 
-        # ✅ 构造参数，确保每个字段都安全
         params = [
             item.get('title', ""),
             item.get('url', ""),
             item.get('url_object_id', ""),
             item.get('front_image_path', ""),
             joined_urls,
-            item.get('parise_nums', 0),
+            item.get('praise_nums', 0),
             item.get('comment_nums', 0),
             item.get('fav_nums', 0),
             item.get('tags', ""),
@@ -74,18 +74,34 @@ class MysqlPipeline(object):
         ]
 
         try:
-            self.cursor.execute(insert_sql, tuple(params))
+            affected_rows = self.cursor.execute(insert_sql, tuple(params))
             self.conn.commit()
+
+            if affected_rows == 1:
+                self.insert_success_count += 1
+            elif affected_rows == 2:
+                self.duplicate_count += 1
+                if not self.has_printed_duplicate:
+                    spider.logger.info(f"MySQL处理，重复更新 1 条❌ 文章标题: {item.get('title', '')[:25]}")
+                    self.has_printed_duplicate = True
+
         except Exception as e:
+            self.fail_count += 1
+            if not self.has_printed_failed:
+                spider.logger.error(f"MySQL处理，插入失败 文章标题: {item.get('title', '')[:25]}")
+                self.has_printed_failed = True
             spider.logger.error(f"MySQL写入异常: {e}")
 
         self.i += 1
-        spider.logger.info(f"MySQL写入第 {self.i} 条 , 文章标题: {item.get('title', '')[:25]}")
-
+        elapsed = time.time() - getattr(item, "_start_time", time.time())
+        spider.logger.info(f"MySQL写入第 {self.i} 条 , 耗时 {elapsed:.2f} 秒，文章标题: {item.get('title', '')[:25]}")
         return item
 
     def spider_closed(self, spider):
         self.conn.close()
+        spider.logger.info(
+            f"MySQL处理完成，共处理 {self.i} 条，成功插入 {self.insert_success_count} 条，重复更新 {self.duplicate_count} 条，失败 {self.fail_count} 条"
+        )
 
 
 class ArticleImgPipeline(ImagesPipeline):
@@ -94,7 +110,6 @@ class ArticleImgPipeline(ImagesPipeline):
         if isinstance(image_urls, str):
             image_urls = [image_urls]
 
-        # 过滤掉 None、非字符串、空字符串
         valid_urls = [self.normalize_url(url) for url in image_urls
                       if isinstance(url, str) and url.strip()]
 
@@ -127,33 +142,3 @@ class ArticleImgPipeline(ImagesPipeline):
         if url.startswith("//"):
             return "https:" + url
         return url.strip()
-
-
-
-
-# class JsonWithEncodingPipeline(object):
-#     def __init__(self):
-#         self.file = codecs.open('article.json', 'a', encoding='utf-8')
-#
-#     def process_item(self, item, spider):
-#         line = json.dumps(dict(item), ensure_ascii=False) + "\n"
-#         self.file.write(line)
-#         return item
-#
-#     def spider_closed(self, spider):
-#         self.file.close()
-
-# class JsonExportPipeline(object):
-#     def __init__(self):
-#         self.file = open('articleexport.json', 'wb')
-#         self.exporter = JsonLinesItemExporter(self.file, encoding='utf-8')
-#         self.exporter.start_exporting()
-#
-#     def process_item(self, item, spider):
-#         self.exporter.export_item(item)
-#         return item
-#
-#     def spider_closed(self, spider):
-#         self.exporter.finish_exporting()
-#         self.file.close()
-

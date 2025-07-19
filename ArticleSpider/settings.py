@@ -78,6 +78,13 @@ ITEM_PIPELINES = {
 }
 LOG_LEVEL = 'INFO'
 
+EXTENSIONS = {
+    'scrapy.extensions.closespider.CloseSpider': None,
+    'scrapy.extensions.corestats.CoreStats': None,
+    'scrapy.extensions.logstats.LogStats': None,
+}
+
+
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 #AUTOTHROTTLE_ENABLED = True

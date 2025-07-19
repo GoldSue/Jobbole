@@ -88,18 +88,18 @@ class JobboleSpider(scrapy.Spider):
             article_item['title'] = title
             article_item['create_date'] = create_date
             article_item['url'] = response.url
-            image_url = [response.meta['img_url']]
-            article_item['front_image_url'] = image_url
+            article_item['front_image_url'] = [response.meta.get('img_url', '')]
             article_item['content'] = content
             article_item['tags'] = tags
             article_item['url_object_id'] = common.get_md5(response.url)
-
+            # article_item['__start_time'] = start_time  # 新增
 
             ajax_url = parse.urljoin(response.url, f"/NewsAjax/GetAjaxNewsInfo?contentId={news_id}")
             yield scrapy.Request(
                 url=ajax_url,
                 callback=self.parse_num,
-                meta={"article_item": article_item}
+                meta={"article_item": article_item,
+                      "start_time": start_time}
             )
 
     def parse_num(self, response):
@@ -109,6 +109,7 @@ class JobboleSpider(scrapy.Spider):
         fav_nums = data.get('ViewCount', 0)
         comment_nums = data.get('CommentCount', 0)
 
+        article_item._start_time = response.meta.get("start_time", time.time())
         article_item['praise_nums'] = praise_nums
         article_item['fav_nums'] = fav_nums
         article_item['comment_nums'] = comment_nums
