@@ -76,7 +76,7 @@ ITEM_PIPELINES = {
    # "ArticleSpider.pipelines.JsonExportPipeline": 3,
    "ArticleSpider.pipelines.MysqlPipeline": 4,
 }
-LOG_LEVEL = 'INFO'
+LOG_LEVEL = 'DEBUG'
 
 EXTENSIONS = {
     'scrapy.extensions.closespider.CloseSpider': None,

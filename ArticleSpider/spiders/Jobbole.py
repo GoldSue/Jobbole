@@ -5,6 +5,8 @@ import scrapy
 from urllib import parse
 from ArticleSpider.items import Jobbole
 from ArticleSpider.utils import common
+from ArticleSpider.utils.common import clean_text
+
 
 class JobboleSpider(scrapy.Spider):
     name = "Jobbole"
@@ -82,6 +84,7 @@ class JobboleSpider(scrapy.Spider):
             title = response.css('#news_title a::text').get(default='').strip()
             create_date = response.css('.time::text').get(default='').strip()
             content = ''.join(response.css('#news_body ::text').getall()).strip()
+            content = clean_text(content)
             tag_list = response.css('#link_source2::text').getall()
             tags = ",".join(tag.strip() for tag in tag_list)
 
